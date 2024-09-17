@@ -6,13 +6,22 @@ First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+
+This is develop for enablement team :) ANDREW! ANDREW! ANDREW!
 ```
+
+...DATABASE USE
+Server: 127.0.0.1 via TCP/IP
+Server type: MariaDB
+Server version: 10.1.10-MariaDB - mariadb.org binary distribution
+Protocol version: 10
+User: create your user
+Server charset: UTF-8 Unicode (utf8)
+
+change the db.ts with the proper detail of db server in your machine
+
+
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
