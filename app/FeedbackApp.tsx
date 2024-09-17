@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addIdea, getIdeas, logout, vote, updateStatus, addComment, getComments } from './actions'
+import { addIdea, getIdeas, logout, vote, updateStatus, addComment, getComments, getCategories } from './actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -22,6 +22,8 @@ interface Idea {
   votes: number;
   voteCount: bigint;
   status: 'waiting' | 'in_progress' | 'done';
+  categoryId: number;
+  categoryName: string;
 }
 
 interface Comment {
@@ -30,6 +32,11 @@ interface Comment {
   userId: string;
   content: string;
   createdAt: string;
+}
+
+interface Category {
+  id: number;
+  name: string;
 }
 
 const statusColors = {
@@ -51,6 +58,8 @@ export default function FeedbackApp({ user }: { user: User }) {
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [newIdea, setNewIdea] = useState('')
   const [newDescription, setNewDescription] = useState('')
+  const [newCategory, setNewCategory] = useState('')
+  const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [comments, setComments] = useState<{ [key: number]: Comment[] }>({})
   const [newComments, setNewComments] = useState<{ [key: number]: string }>({})
@@ -59,6 +68,7 @@ export default function FeedbackApp({ user }: { user: User }) {
 
   useEffect(() => {
     fetchIdeas()
+    fetchCategories()
   }, [])
 
   async function fetchIdeas() {
@@ -74,18 +84,29 @@ export default function FeedbackApp({ user }: { user: User }) {
     }
   }
 
+  async function fetchCategories() {
+    try {
+      const fetchedCategories = await getCategories()
+      setCategories(fetchedCategories)
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (newIdea.trim()) {
+    if (newIdea.trim() && newCategory) {
       setIsLoading(true)
       try {
         const formData = new FormData()
         formData.append('idea', newIdea)
         formData.append('description', newDescription)
+        formData.append('categoryId', newCategory)
         const updatedIdeas = await addIdea(formData)
         setIdeas(updatedIdeas)
         setNewIdea('')
         setNewDescription('')
+        setNewCategory('')
       } catch (error) {
         console.error('Failed to add idea:', error)
       } finally {
@@ -196,7 +217,20 @@ export default function FeedbackApp({ user }: { user: User }) {
           className="w-full"
           disabled={isLoading}
         />
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <select
+          value={newCategory}
+          onChange={(e) => setNewCategory(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
+          disabled={isLoading}
+        >
+          <option value="">Select a category</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id.toString()}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" className="w-full" disabled={isLoading || !newCategory}>
           {isLoading ? 'Submitting...' : 'Submit Idea'}
         </Button>
       </form>
@@ -247,6 +281,7 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
         <p className="text-sm text-gray-500">
           Posted on: {new Date(idea.createdAt).toLocaleString()}
         </p>
+        <p className="text-sm text-gray-500">Category: {idea.categoryName}</p>
         {idea.userId === user.id ? (
           <div className="mt-2 flex items-center">
             <label htmlFor={`status-${idea.id}`} className="sr-only">
@@ -284,15 +319,6 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
             >
               <ThumbsUp className="mr-2 h-4 w-4" />
               Vote
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleVote(idea.id, 'unvote')}
-              disabled={isLoading}
-            >
-              <ThumbsDown className="mr-2 h-4 w-4" />
-              Unvote
             </Button>
           </div>
           <span className="font-bold">Votes: {Number(idea.voteCount)}</span>

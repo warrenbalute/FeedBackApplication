@@ -1,7 +1,7 @@
 // app/actions.ts
 'use server'
 
-import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea, updateIdeaStatus, addCommentToDb, getCommentsForIdea } from '../lib/db'
+import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea, updateIdeaStatus, addCommentToDb, getCommentsForIdea, getCategories as getCategoriesFromDb } from '../lib/db'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
@@ -20,9 +20,10 @@ export async function addIdea(formData: FormData) {
   await ensureInitialized();
   const idea = formData.get('idea') as string;
   const description = formData.get('description') as string;
+  const categoryId = formData.get('categoryId') as string;
   const userIdCookie = cookies().get('userId');
-  if (idea.trim() && userIdCookie) {
-    await addIdeaToDb(idea.trim(), description.trim(), userIdCookie.value);
+  if (idea.trim() && userIdCookie && categoryId) {
+    await addIdeaToDb(idea.trim(), description.trim(), userIdCookie.value, parseInt(categoryId, 10));
   }
   return getIdeas();
 }
@@ -118,4 +119,9 @@ export async function getCurrentUser() {
     return { id: userIdCookie.value, username: usernameCookie.value };
   }
   return null;
+}
+
+export async function getCategories() {
+  await ensureInitialized();
+  return getCategoriesFromDb();
 }
