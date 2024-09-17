@@ -1,6 +1,7 @@
+// app/actions.ts
 'use server'
 
-import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP } from '../lib/db'
+import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea } from '../lib/db'
 import { cookies } from 'next/headers'
 
 let isInitialized = false;
@@ -26,6 +27,21 @@ export async function addIdea(formData: FormData) {
 export async function getIdeas() {
   await ensureInitialized();
   return getIdeasFromDb();
+}
+
+export async function vote(formData: FormData) {
+  await ensureInitialized();
+  const ideaId = parseInt(formData.get('ideaId') as string);
+  const action = formData.get('action') as string;
+  const userIdCookie = cookies().get('userId');
+  if (ideaId && userIdCookie) {
+    if (action === 'vote') {
+      await voteForIdea(ideaId, userIdCookie.value);
+    } else if (action === 'unvote') {
+      await removeVoteFromIdea(ideaId, userIdCookie.value);
+    }
+  }
+  return getIdeas();
 }
 
 export async function login(formData: FormData) {
