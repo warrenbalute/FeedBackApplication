@@ -24,6 +24,7 @@ interface Idea {
   status: 'waiting' | 'in_progress' | 'done';
   categoryId: number;
   categoryName: string;
+  commentCount: number;
 }
 
 interface Comment {
@@ -324,15 +325,15 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
           <span className="font-bold">Votes: {Number(idea.voteCount)}</span>
         </div>
         <div className="w-full">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => toggleComments(idea.id)}
-            className="w-full justify-center"
-          >
-            <MessageCircle className="mr-2 h-4 w-4" />
-            {openComments === idea.id ? 'Hide Comments' : 'Show Comments'}
-          </Button>
+        <Button
+        variant="outline"
+        size="sm"
+        onClick={() => toggleComments(idea.id)}
+        className="w-full justify-center"
+        >
+        <MessageCircle className="mr-2 h-4 w-4" />
+        {openComments === idea.id ? 'Hide Comments' : `Show Comments (${idea.commentCount})`}
+        </Button>
           {openComments === idea.id && (
             <div className="mt-4 space-y-4">
               {comments.map((comment) => (

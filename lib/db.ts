@@ -164,9 +164,12 @@ export async function getIdeasFromDb() {
   try {
     conn = await getConnection();
     const ideas = await conn.query(`
-      SELECT i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, c.name as categoryName
+      SELECT i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, 
+             c.name as categoryName, COUNT(com.id) as commentCount
       FROM ideas i 
       LEFT JOIN categories c ON i.categoryId = c.id
+      LEFT JOIN comments com ON i.id = com.ideaId
+      GROUP BY i.id
       ORDER BY 
         CASE 
           WHEN i.status = 'waiting' THEN 1
@@ -175,11 +178,7 @@ export async function getIdeasFromDb() {
         END,
         i.createdAt DESC
     `);
-    console.log('Fetched ideas:', ideas);
     return ideas;
-  } catch (error) {
-    console.error('Error fetching ideas:', error);
-    throw error;
   } finally {
     if (conn) conn.release();
   }
