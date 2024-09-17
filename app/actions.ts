@@ -1,15 +1,18 @@
 // app/actions.ts
 'use server'
 
-import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea } from '../lib/db'
+import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea, updateIdeaStatus, addCommentToDb, getCommentsForIdea } from '../lib/db'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
 let isInitialized = false;
 
 async function ensureInitialized() {
   if (!isInitialized) {
+    console.log('Initializing database...');
     await initializeDb();
     isInitialized = true;
+    console.log('Database initialization complete.');
   }
 }
 
@@ -44,6 +47,48 @@ export async function vote(formData: FormData) {
   return getIdeas();
 }
 
+export async function updateStatus(formData: FormData) {
+  await ensureInitialized();
+  const ideaId = parseInt(formData.get('ideaId') as string);
+  const status = formData.get('status') as 'waiting' | 'in_progress' | 'done';
+  const userIdCookie = cookies().get('userId');
+  
+  if (!userIdCookie) {
+    throw new Error('User not authenticated');
+  }
+
+  console.log(`Updating status for idea ${ideaId} to ${status}`);
+  try {
+    await updateIdeaStatus(ideaId, status, userIdCookie.value);
+    console.log(`Status updated successfully for idea ${ideaId}`);
+  } catch (error) {
+    console.error(`Error updating status for idea ${ideaId}:`, error);
+    throw error;
+  }
+  return getIdeas();
+}
+
+export async function addComment(formData: FormData) {
+  await ensureInitialized();
+  const ideaId = parseInt(formData.get('ideaId') as string);
+  const content = formData.get('content') as string;
+  const userIdCookie = cookies().get('userId');
+  
+  if (!userIdCookie) {
+    throw new Error('User not authenticated');
+  }
+
+  if (ideaId && content.trim() && userIdCookie) {
+    await addCommentToDb(ideaId, userIdCookie.value, content.trim());
+  }
+  return getCommentsForIdea(ideaId);
+}
+
+export async function getComments(ideaId: number) {
+  await ensureInitialized();
+  return getCommentsForIdea(ideaId);
+}
+
 export async function login(formData: FormData) {
   await ensureInitialized();
   const username = formData.get('username') as string;
@@ -53,7 +98,7 @@ export async function login(formData: FormData) {
     if (result.success && result.user) {
       cookies().set('userId', result.user.id);
       cookies().set('username', result.user.username);
-      return true;
+      redirect('/');
     }
   }
   return false;
@@ -62,6 +107,7 @@ export async function login(formData: FormData) {
 export async function logout() {
   cookies().delete('userId');
   cookies().delete('username');
+  redirect('/');
 }
 
 export async function getCurrentUser() {
