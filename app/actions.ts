@@ -94,16 +94,26 @@ export async function login(formData: FormData) {
   await ensureInitialized();
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
-  if (username && password) {
+  
+  if (!username || !password) {
+    return { success: false, error: 'Username and password are required' };
+  }
+
+  try {
     const result = await authenticateWithLDAP(username, password);
     if (result.success && result.user) {
       cookies().set('userId', result.user.id);
       cookies().set('username', result.user.username);
-      redirect('/');
+      return { success: true, user: result.user };
+    } else {
+      return { success: false, error: 'Invalid credentials' };
     }
+  } catch (error) {
+    console.error('Login error:', error);
+    return { success: false, error: 'An unexpected error occurred' };
   }
-  return false;
 }
+
 
 export async function logout() {
   cookies().delete('userId');

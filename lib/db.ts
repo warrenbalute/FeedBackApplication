@@ -334,5 +334,11 @@ export async function authenticateWithLDAP(username: string, password: string): 
       }
       client.unbind();
     });
+
+    client.on('error', (err) => {
+      console.log('LDAP connection error:', err);
+      resolve({ success: false, error: 'Invalid credentials' });
+    });
+    
   });
 }
