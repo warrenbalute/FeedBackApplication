@@ -1,16 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addIdea, getIdeas, logout, vote, updateStatus, addComment, getComments, getCategories } from './actions'
+import { addIdea, getIdeas, vote, updateStatus, addComment, getComments, getCategories } from '@/app/actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown } from 'lucide-react'
 
 interface User {
   id: string;
-  username: string;
+  name: string;
 }
 
 interface Idea {
@@ -24,7 +25,6 @@ interface Idea {
   status: 'waiting' | 'in_progress' | 'done';
   categoryId: number;
   categoryName: string;
-  commentCount: number;
 }
 
 interface Comment {
@@ -103,6 +103,7 @@ export default function FeedbackApp({ user }: { user: User }) {
         formData.append('idea', newIdea)
         formData.append('description', newDescription)
         formData.append('categoryId', newCategory)
+        formData.append('userId', user.id)
         const updatedIdeas = await addIdea(formData)
         setIdeas(updatedIdeas)
         setNewIdea('')
@@ -146,21 +147,13 @@ export default function FeedbackApp({ user }: { user: User }) {
     }
   }
 
-  async function handleLogout() {
-    try {
-      await logout()
-      window.location.reload()
-    } catch (error) {
-      console.error('Failed to logout:', error)
-    }
-  }
-
   async function handleCommentSubmit(ideaId: number) {
     setIsLoading(true)
     try {
       const formData = new FormData()
       formData.append('ideaId', ideaId.toString())
       formData.append('content', newComments[ideaId] || '')
+      formData.append('userId', user.id)
       const updatedComments = await addComment(formData)
       setComments(prev => ({ ...prev, [ideaId]: updatedComments }))
       setNewComments(prev => ({ ...prev, [ideaId]: '' }))
@@ -199,8 +192,7 @@ export default function FeedbackApp({ user }: { user: User }) {
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-4">
-        <p className="text-lg">Welcome, {user.username}!</p>
-        <Button onClick={handleLogout}>Logout</Button>
+        <p className="text-lg">Welcome, {user.name}!</p>
       </div>
       <form onSubmit={handleSubmit} className="mb-4 space-y-4">
         <Input
@@ -218,19 +210,18 @@ export default function FeedbackApp({ user }: { user: User }) {
           className="w-full"
           disabled={isLoading}
         />
-        <select
-          value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-          disabled={isLoading}
-        >
-          <option value="">Select a category</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id.toString()}>
-              {category.name}
-            </option>
-          ))}
-        </select>
+        <Select value={newCategory} onValueChange={setNewCategory}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id.toString()}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button type="submit" className="w-full" disabled={isLoading || !newCategory}>
           {isLoading ? 'Submitting...' : 'Submit Idea'}
         </Button>
@@ -332,7 +323,7 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
         className="w-full justify-center"
         >
         <MessageCircle className="mr-2 h-4 w-4" />
-        {openComments === idea.id ? 'Hide Comments' : `Show Comments (${idea.commentCount})`}
+        {openComments === idea.id ? 'Hide Comments' : `Show Comments (${comments.length})`}
         </Button>
           {openComments === idea.id && (
             <div className="mt-4 space-y-4">

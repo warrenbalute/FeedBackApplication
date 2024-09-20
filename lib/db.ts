@@ -13,7 +13,8 @@ const pool = mariadb.createPool({
   connectTimeout: 30000,
 });
 
-async function getConnection() {
+
+export async function getConnection() {
   try {
     return await pool.getConnection();
   } catch (err) {
@@ -21,7 +22,6 @@ async function getConnection() {
     throw err;
   }
 }
-
 export async function initializeDb() {
   let conn;
   try {
