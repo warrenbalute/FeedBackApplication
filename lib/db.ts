@@ -60,6 +60,8 @@ export async function initializeDb() {
         id INT PRIMARY KEY AUTO_INCREMENT,
         ideaId INT NOT NULL,
         userId VARCHAR(191) NOT NULL,
+        voteType ENUM('upvote', 'downvote') NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (ideaId) REFERENCES ideas(id),
         UNIQUE KEY unique_vote (ideaId, userId)
       )
@@ -69,13 +71,14 @@ export async function initializeDb() {
     // Create comments table if it doesn't exist
     console.log('Creating comments table...');
     await conn.query(`
-      CREATE TABLE IF NOT EXISTS comments (
+      CREATE TABLE IF NOT EXISTS votes (
         id INT PRIMARY KEY AUTO_INCREMENT,
         ideaId INT NOT NULL,
         userId VARCHAR(191) NOT NULL,
-        content TEXT NOT NULL,
+        voteType ENUM('upvote', 'downvote') NOT NULL,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ideaId) REFERENCES ideas(id)
+        FOREIGN KEY (ideaId) REFERENCES ideas(id),
+        UNIQUE KEY unique_vote (ideaId, userId)
       )
     `);
     console.log('Comments table created or already exists.');
@@ -165,11 +168,11 @@ export async function getIdeasFromDb() {
     conn = await getConnection();
     const ideas = await conn.query(`
       SELECT i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, 
-             c.name as categoryName, COUNT(com.id) as commentCount
+             COALESCE(c.name, 'Uncategorized') as categoryName, COUNT(com.id) as commentCount
       FROM ideas i 
       LEFT JOIN categories c ON i.categoryId = c.id
       LEFT JOIN comments com ON i.id = com.ideaId
-      GROUP BY i.id
+      GROUP BY i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, c.name
       ORDER BY 
         CASE 
           WHEN i.status = 'waiting' THEN 1
@@ -178,9 +181,26 @@ export async function getIdeasFromDb() {
         END,
         i.createdAt DESC
     `);
-    return ideas;
+    console.log('Ideas fetched successfully:', ideas.length);
+    
+    // Convert BigInt values to regular numbers
+    const serializedIdeas = ideas.map(idea => ({
+      ...idea,
+      id: Number(idea.id),
+      categoryId: idea.categoryId ? Number(idea.categoryId) : null,
+      voteCount: Number(idea.voteCount),
+      commentCount: Number(idea.commentCount)
+    }));
+    
+    return serializedIdeas;
+  } catch (error) {
+    console.error('Error in getIdeasFromDb:', error);
+    throw error;
   } finally {
-    if (conn) conn.release();
+    if (conn) {
+      await conn.release();
+      console.log('Database connection released');
+    }
   }
 }
 
@@ -188,12 +208,27 @@ export async function addIdeaToDb(idea: string, description: string, userId: str
   let conn;
   try {
     conn = await getConnection();
-    await conn.query(
+    
+    // If no category is provided, use a default category (e.g., 'Other')
+    if (!categoryId) {
+      const [defaultCategory] = await conn.query('SELECT id FROM categories WHERE name = ?', ['Other']);
+      categoryId = defaultCategory ? Number(defaultCategory.id) : null;
+    }
+
+    const result = await conn.query(
       'INSERT INTO ideas (idea, description, userId, categoryId) VALUES (?, ?, ?, ?)',
       [idea, description, userId.substring(0, 191), categoryId]
     );
+    console.log('Idea added successfully:', result.insertId);
+    return Number(result.insertId);
+  } catch (error) {
+    console.error('Error in addIdeaToDb:', error);
+    throw error;
   } finally {
-    if (conn) conn.release();
+    if (conn) {
+      await conn.release();
+      console.log('Database connection released');
+    }
   }
 }
 

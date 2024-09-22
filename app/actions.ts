@@ -5,6 +5,7 @@ import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteFo
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getConnection } from '@/lib/db'
+import { revalidatePath } from 'next/cache'
 
 let isInitialized = false;
 
@@ -18,47 +19,87 @@ async function ensureInitialized() {
 }
 
 export async function addIdea(formData: FormData) {
-  const conn = await getConnection()
+  const idea = formData.get('idea') as string
+  const description = formData.get('description') as string
+  const userId = formData.get('userId') as string
+  const categoryId = formData.get('categoryId') as string
+
+  if (!idea || !description || !userId || !categoryId) {
+    throw new Error('Missing required fields')
+  }
+
   try {
-    const idea = formData.get('idea') as string
-    const description = formData.get('description') as string
-    const categoryId = formData.get('categoryId') as string
-    const userId = formData.get('userId') as string
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ideas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idea, description, userId, categoryId }),
+    })
 
-    console.log('Adding idea:', { idea, description, categoryId, userId })
+    if (!response.ok) {
+      throw new Error('Failed to add idea')
+    }
 
-    await conn.query(
-      'INSERT INTO ideas (idea, description, userId, categoryId) VALUES (?, ?, ?, ?)',
-      [idea, description, userId, categoryId]
-    )
+    const newIdea = await response.json()
 
-    return await getIdeas()
+    // Revalidate the ideas page
+    revalidatePath('/feedback')
+
+    return newIdea
   } catch (error) {
-    console.error('Failed to add idea:', error)
+    console.error('Error adding idea:', error)
     throw error
-  } finally {
-    conn.release()
   }
 }
 
 export async function getIdeas() {
-  await ensureInitialized();
-  return getIdeasFromDb();
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ideas`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch ideas')
+    }
+    return response.json()
+  } catch (error) {
+    console.error('Error fetching ideas:', error)
+    throw error
+  }
 }
 
 export async function vote(formData: FormData) {
-  await ensureInitialized();
-  const ideaId = parseInt(formData.get('ideaId') as string);
-  const action = formData.get('action') as string;
-  const userIdCookie = cookies().get('userId');
-  if (ideaId && userIdCookie) {
-    if (action === 'vote') {
-      await voteForIdea(ideaId, userIdCookie.value);
-    } else if (action === 'unvote') {
-      await removeVoteFromIdea(ideaId, userIdCookie.value);
-    }
+  const conn = await getConnection()
+  try {
+    const ideaId = formData.get('ideaId') as string
+    const userId = formData.get('userId') as string
+    const action = formData.get('action') as string
+
+    const voteType = action === 'vote' ? 'upvote' : 'downvote'
+
+    await conn.query(`
+      INSERT INTO votes (ideaId, userId, voteType)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE voteType = ?
+    `, [ideaId, userId, voteType, voteType])
+
+    // Update the voteCount in the ideas table
+    await conn.query(`
+      UPDATE ideas
+      SET voteCount = (
+        SELECT COUNT(CASE WHEN voteType = 'upvote' THEN 1 ELSE NULL END) -
+               COUNT(CASE WHEN voteType = 'downvote' THEN 1 ELSE NULL END)
+        FROM votes
+        WHERE ideaId = ?
+      )
+      WHERE id = ?
+    `, [ideaId, ideaId])
+
+    return await getIdeas()
+  } catch (error) {
+    console.error('Failed to vote:', error)
+    throw error
+  } finally {
+    conn.release()
   }
-  return getIdeas();
 }
 
 export async function updateStatus(formData: FormData) {
@@ -167,10 +208,10 @@ export async function getUserIdeas(userId: string) {
       ORDER BY i.createdAt DESC
     `, [userId])
     console.log('getUserIdeas query result:', rows)
-    return rows
+    return Array.isArray(rows) ? rows : rows ? [rows] : []
   } catch (error) {
     console.error('Failed to fetch user ideas:', error)
-    throw error
+    return []
   } finally {
     conn.release()
   }
@@ -187,10 +228,10 @@ export async function getUserComments(userId: string) {
       ORDER BY c.createdAt DESC
     `, [userId])
     console.log('getUserComments query result:', rows)
-    return rows
+    return Array.isArray(rows) ? rows : rows ? [rows] : []
   } catch (error) {
     console.error('Failed to fetch user comments:', error)
-    throw error
+    return []
   } finally {
     conn.release()
   }

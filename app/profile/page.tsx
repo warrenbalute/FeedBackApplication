@@ -1,3 +1,5 @@
+//app/profile/page.tsx
+
 import { getServerSession } from "next-auth/next"
 import { redirect } from "next/navigation"
 import { authOptions } from "../api/auth/[...nextauth]/route"
@@ -13,6 +15,9 @@ export default async function ProfilePage() {
 
   const ideas = await getUserIdeas(session.user.id)
   const comments = await getUserComments(session.user.id)
+
+  console.log('Fetched ideas:', ideas)
+  console.log('Fetched comments:', comments)
 
   return <ProfileComponent user={session.user} ideas={ideas} comments={comments} />
 }

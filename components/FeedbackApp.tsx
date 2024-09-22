@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addIdea, getIdeas, vote, updateStatus, addComment, getComments, getCategories } from '@/app/actions'
+import { addIdea, getIdeas, updateStatus, addComment, getComments, getCategories } from '@/app/actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,11 +20,11 @@ interface Idea {
   description: string;
   userId: string;
   createdAt: string;
-  votes: number;
-  voteCount: bigint;
+  voteCount: number;
   status: 'waiting' | 'in_progress' | 'done';
   categoryId: number;
   categoryName: string;
+  commentCount: number;
 }
 
 interface Comment {
@@ -66,6 +66,7 @@ export default function FeedbackApp({ user }: { user: User }) {
   const [newComments, setNewComments] = useState<{ [key: number]: string }>({})
   const [openComments, setOpenComments] = useState<number | null>(null)
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('all')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchIdeas()
@@ -74,12 +75,13 @@ export default function FeedbackApp({ user }: { user: User }) {
 
   async function fetchIdeas() {
     setIsLoading(true)
+    setError(null)
     try {
       const fetchedIdeas = await getIdeas()
-      console.log('Fetched ideas in component:', fetchedIdeas);
       setIdeas(fetchedIdeas)
     } catch (error) {
-      console.error('Failed to fetch ideas:', error)
+      console.error('Error fetching ideas:', error)
+      setError('Failed to fetch ideas. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -88,9 +90,15 @@ export default function FeedbackApp({ user }: { user: User }) {
   async function fetchCategories() {
     try {
       const fetchedCategories = await getCategories()
-      setCategories(fetchedCategories)
+      if (Array.isArray(fetchedCategories)) {
+        setCategories(fetchedCategories)
+      } else {
+        console.error('Fetched categories is not an array:', fetchedCategories)
+        setCategories([])
+      }
     } catch (error) {
       console.error('Failed to fetch categories:', error)
+      setCategories([])
     }
   }
 
@@ -98,6 +106,7 @@ export default function FeedbackApp({ user }: { user: User }) {
     event.preventDefault()
     if (newIdea.trim() && newCategory) {
       setIsLoading(true)
+      setError(null)
       try {
         const formData = new FormData()
         formData.append('idea', newIdea)
@@ -111,37 +120,55 @@ export default function FeedbackApp({ user }: { user: User }) {
         setNewCategory('')
       } catch (error) {
         console.error('Failed to add idea:', error)
+        setError('Failed to add idea. Please try again.')
       } finally {
         setIsLoading(false)
       }
     }
   }
 
-  async function handleVote(ideaId: number, action: 'vote' | 'unvote') {
-    setIsLoading(true)
+  async function handleVote(ideaId: number, voteType: 'upvote' | 'downvote') {
+    setIsLoading(true);
+    setError(null);
     try {
-      const formData = new FormData()
-      formData.append('ideaId', ideaId.toString())
-      formData.append('action', action)
-      const updatedIdeas = await vote(formData)
-      setIdeas(updatedIdeas)
+      const formData = new FormData();
+      formData.append('ideaId', ideaId.toString());
+      formData.append('userId', user.id);
+      formData.append('voteType', voteType);
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error('Failed to vote');
+      }
+      const updatedIdeas = await response.json();
+      setIdeas(updatedIdeas);
     } catch (error) {
-      console.error('Failed to vote:', error)
+      console.error('Failed to vote:', error);
+      setError('Failed to vote. Please try again.');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
   async function handleStatusChange(ideaId: number, newStatus: 'waiting' | 'in_progress' | 'done') {
     setIsLoading(true)
+    setError(null)
     try {
       const formData = new FormData()
       formData.append('ideaId', ideaId.toString())
       formData.append('status', newStatus)
       const updatedIdeas = await updateStatus(formData)
-      setIdeas(updatedIdeas)
+      if (Array.isArray(updatedIdeas)) {
+        setIdeas(updatedIdeas)
+      } else {
+        console.error('Updated ideas after status change is not an array:', updatedIdeas)
+        setError('Failed to update status. Please try again.')
+      }
     } catch (error) {
       console.error('Failed to update status:', error)
+      setError('Failed to update status. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -149,16 +176,23 @@ export default function FeedbackApp({ user }: { user: User }) {
 
   async function handleCommentSubmit(ideaId: number) {
     setIsLoading(true)
+    setError(null)
     try {
       const formData = new FormData()
       formData.append('ideaId', ideaId.toString())
       formData.append('content', newComments[ideaId] || '')
       formData.append('userId', user.id)
       const updatedComments = await addComment(formData)
-      setComments(prev => ({ ...prev, [ideaId]: updatedComments }))
-      setNewComments(prev => ({ ...prev, [ideaId]: '' }))
+      if (Array.isArray(updatedComments)) {
+        setComments(prev => ({ ...prev, [ideaId]: updatedComments }))
+        setNewComments(prev => ({ ...prev, [ideaId]: '' }))
+      } else {
+        console.error('Updated comments is not an array:', updatedComments)
+        setError('Failed to add comment. Please try again.')
+      }
     } catch (error) {
       console.error('Failed to add comment:', error)
+      setError('Failed to add comment. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -166,11 +200,18 @@ export default function FeedbackApp({ user }: { user: User }) {
 
   async function fetchComments(ideaId: number) {
     setIsLoading(true)
+    setError(null)
     try {
       const fetchedComments = await getComments(ideaId)
-      setComments(prev => ({ ...prev, [ideaId]: fetchedComments }))
+      if (Array.isArray(fetchedComments)) {
+        setComments(prev => ({ ...prev, [ideaId]: fetchedComments }))
+      } else {
+        console.error('Fetched comments is not an array:', fetchedComments)
+        setError('Failed to fetch comments. Please try again.')
+      }
     } catch (error) {
       console.error('Failed to fetch comments:', error)
+      setError('Failed to fetch comments. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -194,6 +235,7 @@ export default function FeedbackApp({ user }: { user: User }) {
       <div className="flex justify-between items-center mb-4">
         <p className="text-lg">Welcome, {user.name}!</p>
       </div>
+      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{error}</div>}
       <form onSubmit={handleSubmit} className="mb-4 space-y-4">
         <Input
           type="text"
@@ -240,7 +282,7 @@ export default function FeedbackApp({ user }: { user: User }) {
         </select>
       </div>
       <div className="space-y-4">
-        {filteredIdeas.map((idea) => (
+        {Array.isArray(filteredIdeas) && filteredIdeas.map((idea) => (
           <IdeaCard
             key={idea.id}
             idea={idea}
@@ -306,11 +348,20 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleVote(idea.id, 'vote')}
+              onClick={() => handleVote(idea.id, 'upvote')}
               disabled={isLoading}
             >
               <ThumbsUp className="mr-2 h-4 w-4" />
-              Vote
+              Upvote
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleVote(idea.id, 'downvote')}
+              disabled={isLoading}
+            >
+              <ThumbsDown className="mr-2 h-4 w-4" />
+              Downvote
             </Button>
           </div>
           <span className="font-bold">Votes: {Number(idea.voteCount)}</span>
@@ -323,7 +374,7 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
         className="w-full justify-center"
         >
         <MessageCircle className="mr-2 h-4 w-4" />
-        {openComments === idea.id ? 'Hide Comments' : `Show Comments (${comments.length})`}
+        {openComments === idea.id ? 'Hide Comments' : `Show Comments (${idea.commentCount})`}
         </Button>
           {openComments === idea.id && (
             <div className="mt-4 space-y-4">

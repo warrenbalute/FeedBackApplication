@@ -1,7 +1,17 @@
+//app/api/auth/[...nextauth]/route.ts
+
 import NextAuth from "next-auth"
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { authenticateWithLDAP } from "@/lib/db"
+import { initializeDatabase } from "@/lib/initDb"
+import { cookies } from 'next/headers'
+
+// Initialize the database
+initializeDatabase().catch(error => {
+  console.error('Failed to initialize database:', error)
+  process.exit(1) // Exit the process if database initialization fails
+})
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -35,6 +45,13 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
+    async signIn({ user }) {
+      if (user) {
+        // Set the userId cookie
+        cookies().set('userId', user.id)
+      }
+      return true
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
