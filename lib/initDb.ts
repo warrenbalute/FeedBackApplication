@@ -1,4 +1,6 @@
 // lib/initDb.ts
+
+
 import { getConnection } from './db'
 
 async function initializeDatabase() {

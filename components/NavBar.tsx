@@ -1,4 +1,4 @@
-////app/components/NavBar.tsx
+//app/components/NavBar.tsx
 
 'use client'
 
@@ -15,7 +15,7 @@ export default function NavBar() {
     <header className="bg-primary text-primary-foreground shadow-md">
       <nav className="container mx-auto px-4 py-2 flex justify-between items-center">
         <Link href="/" className="text-lg font-bold">
-         UAMBizOps Feedback Space
+         UAM BizOps Feedback Space
         </Link>
         {status === 'authenticated' ? (
           <div className="space-x-4">

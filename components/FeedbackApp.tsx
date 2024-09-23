@@ -1,3 +1,5 @@
+//app/components/FeedbackApp.tsx
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -234,6 +236,9 @@ export default function FeedbackApp({ user }: { user: User }) {
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-4">
         <p className="text-lg">Welcome, {user.name}!</p>
+      </div>
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-sm">Please Share your  here- it helps us improve. Thank you!</p>
       </div>
       {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{error}</div>}
       <form onSubmit={handleSubmit} className="mb-4 space-y-4">

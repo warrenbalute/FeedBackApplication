@@ -1,4 +1,6 @@
 // app/actions.ts
+
+
 'use server'
 
 import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea, updateIdeaStatus, addCommentToDb, getCommentsForIdea, getCategories as getCategoriesFromDb } from '../lib/db'
