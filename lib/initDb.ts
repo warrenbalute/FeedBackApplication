@@ -68,6 +68,15 @@ async function initializeDatabase() {
       ('APR')
     `)
 
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        userId VARCHAR(191) PRIMARY KEY,
+        profilePictureUrl VARCHAR(255),
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `)
+
     console.log('Database initialized successfully')
   } catch (error) {
     console.error('Error initializing database:', error)

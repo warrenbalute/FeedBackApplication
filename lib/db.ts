@@ -114,6 +114,15 @@ export async function initializeDb() {
 
     await populateCategories();
 
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        userId VARCHAR(191) PRIMARY KEY,
+        profilePictureUrl VARCHAR(255),
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -434,7 +443,59 @@ export async function getUserComments(userId: string, page = 1, pageSize = 10) {
   }
 }
 
-export async function authenticateWithLDAP(username: string, password: string): Promise<{ success: boolean, user?: { id: string, username: string } }> {
+// export async function authenticateWithLDAP(username: string, password: string): Promise<{ success: boolean, user?: { id: string, username: string } }> {
+//   return new Promise((resolve, reject) => {
+//     const client = ldap.createClient({
+//       url: 'ldap://ldap.forumsys.com:389'
+//     });
+
+//     const bindDN = `uid=${username},dc=example,dc=com`;
+
+//     client.bind(bindDN, password, (error) => {
+//       if (error) {
+//         console.log('LDAP bind failed:', error);
+//         resolve({ success: false });
+//       } else {
+//         console.log('LDAP bind succeeded');
+//         resolve({ success: true, user: { id: username, username: username } });
+//       }
+//       client.unbind();
+//     });
+
+//     client.on('error', (err) => {
+//       console.log('LDAP connection error:', err);
+//       resolve({ success: false, error: 'Invalid credentials' });
+//     });
+    
+//   });
+// }
+
+export async function updateProfilePicture(userId: string, profilePictureUrl: string) {
+  let conn;
+  try {
+    conn = await getConnection();
+    await conn.query('INSERT INTO user_profiles (userId, profilePictureUrl) VALUES (?, ?) ON DUPLICATE KEY UPDATE profilePictureUrl = ?', [userId, profilePictureUrl, profilePictureUrl]);
+    console.log('Profile picture URL updated in database');
+  } catch (error) {
+    console.error('Error updating profile picture in database:', error);
+    throw error;
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
+export async function getProfilePicture(userId: string): Promise<string | null> {
+  let conn;
+  try {
+    conn = await getConnection();
+    const [profile] = await conn.query('SELECT profilePictureUrl FROM user_profiles WHERE userId = ?', [userId]);
+    return profile ? profile.profilePictureUrl : null;
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
+export async function authenticateWithLDAP(username: string, password: string): Promise<{ success: boolean, user?: { id: string, username: string, profilePictureUrl?: string } }> {
   return new Promise((resolve, reject) => {
     const client = ldap.createClient({
       url: 'ldap://ldap.forumsys.com:389'
@@ -442,13 +503,21 @@ export async function authenticateWithLDAP(username: string, password: string): 
 
     const bindDN = `uid=${username},dc=example,dc=com`;
 
-    client.bind(bindDN, password, (error) => {
+    client.bind(bindDN, password, async (error) => {
       if (error) {
         console.log('LDAP bind failed:', error);
         resolve({ success: false });
       } else {
         console.log('LDAP bind succeeded');
-        resolve({ success: true, user: { id: username, username: username } });
+        const userProfile = await getOrCreateUserProfile(username);
+        resolve({ 
+          success: true, 
+          user: { 
+            id: username, 
+            username: username, 
+            profilePictureUrl: userProfile.profilePictureUrl 
+          } 
+        });
       }
       client.unbind();
     });
@@ -457,6 +526,21 @@ export async function authenticateWithLDAP(username: string, password: string): 
       console.log('LDAP connection error:', err);
       resolve({ success: false, error: 'Invalid credentials' });
     });
-    
   });
+}
+
+async function getOrCreateUserProfile(userId: string) {
+  let conn;
+  try {
+    conn = await getConnection();
+    const [existingProfile] = await conn.query('SELECT * FROM user_profiles WHERE userId = ?', [userId]);
+    if (existingProfile) {
+      return existingProfile;
+    } else {
+      await conn.query('INSERT INTO user_profiles (userId) VALUES (?)', [userId]);
+      return { userId, profilePictureUrl: null };
+    }
+  } finally {
+    if (conn) conn.release();
+  }
 }

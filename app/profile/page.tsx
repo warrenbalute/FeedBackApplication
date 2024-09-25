@@ -19,5 +19,7 @@ export default async function ProfilePage() {
   console.log('Fetched ideas:', ideas)
   console.log('Fetched comments:', comments)
 
+  //return <ProfileComponent user={session.user} ideas={ideas} comments={comments} />
+
   return <ProfileComponent user={session.user} ideas={ideas} comments={comments} />
 }
