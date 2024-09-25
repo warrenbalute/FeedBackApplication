@@ -3,7 +3,7 @@
 
 'use server'
 
-import { getIdeasFromDb, addIdeaToDb, initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea, updateIdeaStatus, addCommentToDb, getCommentsForIdea, getCategories as getCategoriesFromDb } from '../lib/db'
+import { getIdeasFromDb, addIdeaToDb,  initializeDb, authenticateWithLDAP, voteForIdea, removeVoteFromIdea, updateIdeaStatus, addCommentToDb, getCommentsForIdea, getCategories as getCategoriesFromDb } from '../lib/db'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getConnection } from '@/lib/db'
@@ -69,39 +69,18 @@ export async function getIdeas() {
 }
 
 export async function vote(formData: FormData) {
-  const conn = await getConnection()
-  try {
-    const ideaId = formData.get('ideaId') as string
-    const userId = formData.get('userId') as string
-    const action = formData.get('action') as string
-
-    const voteType = action === 'vote' ? 'upvote' : 'downvote'
-
-    await conn.query(`
-      INSERT INTO votes (ideaId, userId, voteType)
-      VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE voteType = ?
-    `, [ideaId, userId, voteType, voteType])
-
-    // Update the voteCount in the ideas table
-    await conn.query(`
-      UPDATE ideas
-      SET voteCount = (
-        SELECT COUNT(CASE WHEN voteType = 'upvote' THEN 1 ELSE NULL END) -
-               COUNT(CASE WHEN voteType = 'downvote' THEN 1 ELSE NULL END)
-        FROM votes
-        WHERE ideaId = ?
-      )
-      WHERE id = ?
-    `, [ideaId, ideaId])
-
-    return await getIdeas()
-  } catch (error) {
-    console.error('Failed to vote:', error)
-    throw error
-  } finally {
-    conn.release()
+  await ensureInitialized();
+  const ideaId = parseInt(formData.get('ideaId') as string);
+  const action = formData.get('action') as string;
+  const userIdCookie = cookies().get('userId');
+  if (ideaId && userIdCookie) {
+    if (action === 'vote') {
+      await voteForIdea(ideaId, userIdCookie.value);
+    } else if (action === 'unvote') {
+      await removeVoteFromIdea(ideaId, userIdCookie.value);
+    }
   }
+  return getIdeas();
 }
 
 export async function updateStatus(formData: FormData) {

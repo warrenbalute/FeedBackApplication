@@ -232,38 +232,65 @@ export async function addIdeaToDb(idea: string, description: string, userId: str
   }
 }
 
-export async function voteForIdea(ideaId: number, userId: string, voteType: 'upvote' | 'downvote' | 'unvote') {
-  const conn = await getConnection();
+export async function voteForIdea(ideaId: number, userId: string) {
+  let conn;
   try {
-    await conn.beginTransaction();
+    conn = await getConnection();
+    await conn.query('START TRANSACTION');
+    
+    const [existingVote] = await conn.query(
+      'SELECT id FROM votes WHERE ideaId = ? AND userId = ?',
+      [ideaId, userId.substring(0, 191)]
+    );
 
-    if (voteType === 'unvote') {
-      await conn.query('DELETE FROM votes WHERE ideaId = ? AND userId = ?', [ideaId, userId]);
-    } else {
+    if (!existingVote) {
       await conn.query(
-        'INSERT INTO votes (ideaId, userId, voteType) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE voteType = ?',
-        [ideaId, userId, voteType, voteType]
+        'INSERT INTO votes (ideaId, userId) VALUES (?, ?)',
+        [ideaId, userId.substring(0, 191)]
+      );
+      await conn.query(
+        'UPDATE ideas SET voteCount = voteCount + 1 WHERE id = ?',
+        [ideaId]
       );
     }
 
-    // Update vote count
-    await conn.query(`
-      UPDATE ideas
-      SET voteCount = (
-        SELECT COUNT(CASE WHEN voteType = 'upvote' THEN 1 ELSE NULL END) -
-               COUNT(CASE WHEN voteType = 'downvote' THEN 1 ELSE NULL END)
-        FROM votes
-        WHERE ideaId = ?
-      )
-      WHERE id = ?
-    `, [ideaId, ideaId]);
-
-    await conn.commit();
+    await conn.query('COMMIT');
   } catch (error) {
-    await conn.rollback();
+    if (conn) await conn.query('ROLLBACK');
     throw error;
   } finally {
-    conn.release();
+    if (conn) conn.release();
+  }
+}
+
+export async function removeVoteFromIdea(ideaId: number, userId: string) {
+  let conn;
+  try {
+    conn = await getConnection();
+    await conn.query('START TRANSACTION');
+    
+    const [existingVote] = await conn.query(
+      'SELECT id FROM votes WHERE ideaId = ? AND userId = ?',
+      [ideaId, userId.substring(0, 191)]
+    );
+
+    if (existingVote) {
+      await conn.query(
+        'DELETE FROM votes WHERE ideaId = ? AND userId = ?',
+        [ideaId, userId.substring(0, 191)]
+      );
+      await conn.query(
+        'UPDATE ideas SET voteCount = GREATEST(voteCount - 1, 0) WHERE id = ?',
+        [ideaId]
+      );
+    }
+
+    await conn.query('COMMIT');
+  } catch (error) {
+    if (conn) await conn.query('ROLLBACK');
+    throw error;
+  } finally {
+    if (conn) conn.release();
   }
 }
 
@@ -283,41 +310,6 @@ export async function getIdeaById(ideaId: number) {
   }
 }
 
-export async function removeVoteFromIdea(ideaId: number, userId: string) {
-  let conn;
-  try {
-    conn = await getConnection();
-    await conn.query('START TRANSACTION');
-    
-    const [vote] = await conn.query(
-      'SELECT voteType FROM votes WHERE ideaId = ? AND userId = ?',
-      [ideaId, userId.substring(0, 191)]
-    );
-
-    if (vote) {
-      await conn.query(
-        'DELETE FROM votes WHERE ideaId = ? AND userId = ?',
-        [ideaId, userId.substring(0, 191)]
-      );
-      
-      await conn.query(
-        `UPDATE ideas 
-         SET voteCount = GREATEST(voteCount + ?, 0) 
-         WHERE id = ?`,
-        [vote.voteType === 'upvote' ? -1 : 1, ideaId]
-      );
-    }
-
-    await conn.query('COMMIT');
-    return { success: true, message: vote ? 'Vote removed' : 'No vote to remove' };
-  } catch (error) {
-    if (conn) await conn.query('ROLLBACK');
-    console.error('Error in removeVoteFromIdea:', error);
-    throw new Error('Failed to remove vote');
-  } finally {
-    if (conn) conn.release();
-  }
-}
 
 export async function updateIdeaStatus(ideaId: number, status: 'waiting' | 'in_progress' | 'done', userId: string) {
   let conn;

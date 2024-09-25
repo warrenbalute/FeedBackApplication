@@ -1,15 +1,14 @@
-//app/components/FeedbackApp.tsx
-
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addIdea, getIdeas, updateStatus, addComment, getComments, getCategories } from '@/app/actions'
+import { addIdea, vote, getIdeas, updateStatus, addComment, getComments, getCategories } from '@/app/actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown } from 'lucide-react'
+import { Toast } from "@/components/ui/toast"
 
 interface User {
   id: string;
@@ -27,6 +26,7 @@ interface Idea {
   categoryId: number;
   categoryName: string;
   commentCount: number;
+  userVote: 'upvote' | 'downvote' | null;
 }
 
 interface Comment {
@@ -69,6 +69,7 @@ export default function FeedbackApp({ user }: { user: User }) {
   const [openComments, setOpenComments] = useState<number | null>(null)
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('all')
   const [error, setError] = useState<string | null>(null)
+  const [isVoting, setIsVoting] = useState<{ [key: number]: boolean }>({})
 
   useEffect(() => {
     fetchIdeas()
@@ -129,28 +130,18 @@ export default function FeedbackApp({ user }: { user: User }) {
     }
   }
 
-  async function handleVote(ideaId: number, voteType: 'upvote' | 'downvote') {
-    setIsLoading(true);
-    setError(null);
+  async function handleVote(ideaId: number, action: 'vote' | 'unvote') {
+    setIsLoading(true)
     try {
-      const formData = new FormData();
-      formData.append('ideaId', ideaId.toString());
-      formData.append('userId', user.id);
-      formData.append('voteType', voteType);
-      const response = await fetch('/api/feedback', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!response.ok) {
-        throw new Error('Failed to vote');
-      }
-      const updatedIdeas = await response.json();
-      setIdeas(updatedIdeas);
+      const formData = new FormData()
+      formData.append('ideaId', ideaId.toString())
+      formData.append('action', action)
+      const updatedIdeas = await vote(formData)
+      setIdeas(updatedIdeas)
     } catch (error) {
-      console.error('Failed to vote:', error);
-      setError('Failed to vote. Please try again.');
+      console.error('Failed to vote:', error)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
 
@@ -301,6 +292,7 @@ export default function FeedbackApp({ user }: { user: User }) {
             setNewComment={(comment) => setNewComments(prev => ({ ...prev, [idea.id]: comment }))}
             handleCommentSubmit={handleCommentSubmit}
             isLoading={isLoading}
+            isVoting={isVoting[idea.id]}
           />
         ))}
       </div>
@@ -308,7 +300,7 @@ export default function FeedbackApp({ user }: { user: User }) {
   )
 }
 
-function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, openComments, comments, newComment, setNewComment, handleCommentSubmit, isLoading }) {
+function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, openComments, comments, newComment, setNewComment, handleCommentSubmit, isLoading, isVoting }) {
   return (
     <Card key={idea.id} className={`${statusColors[idea.status]} transition-colors duration-200`}>
       <CardHeader>
@@ -348,25 +340,25 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
         )}
       </CardContent>
       <CardFooter className="flex flex-col items-start space-y-4">
-        <div className="flex justify-between items-center w-full">
+      <div className="flex justify-between items-center w-full">
           <div className="flex items-center space-x-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleVote(idea.id, 'upvote')}
+              onClick={() => handleVote(idea.id, 'vote')}
               disabled={isLoading}
             >
               <ThumbsUp className="mr-2 h-4 w-4" />
-              Upvote
+              Vote
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleVote(idea.id, 'downvote')}
+              onClick={() => handleVote(idea.id, 'unvote')}
               disabled={isLoading}
             >
               <ThumbsDown className="mr-2 h-4 w-4" />
-              Downvote
+              Vote
             </Button>
           </div>
           <span className="font-bold">Votes: {Number(idea.voteCount)}</span>
