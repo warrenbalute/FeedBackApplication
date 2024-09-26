@@ -49,8 +49,8 @@ export const authOptions: NextAuthOptions = {
           return {
             id: result.user.id,
             name: result.user.username,
-            email: `${result.user.username}@example.com`, // Adjust as needed
-            profilePictureUrl: result.user.profilePictureUrl
+            email: `${result.user.username}@example.com`,
+            image: result.user.profilePictureUrl
           }
         } else {
           console.log('Authentication failed')
@@ -62,16 +62,20 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user }) {
       if (user) {
-        // Set the userId cookie
         cookies().set('userId', user.id)
       }
       return true
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id
         token.name = user.name
-        token.profilePictureUrl = user.profilePictureUrl;
+        token.email = user.email
+        token.picture = user.image
+      }
+      // If the session was updated, update the token
+      if (trigger === "update" && session?.user) {
+        token.picture = session.user.image
       }
       return token
     },
@@ -79,8 +83,8 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string
         session.user.name = token.name as string
-        session.user.profilePictureUrl = token.profilePictureUrl as string;
-        
+        session.user.email = token.email as string
+        session.user.image = token.picture as string
       }
       return session
     }

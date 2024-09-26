@@ -1,3 +1,6 @@
+//app/components/FeedbackApp.tsx
+
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -7,8 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown } from 'lucide-react'
-import { Toast } from "@/components/ui/toast"
+import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, MoreHorizontal } from 'lucide-react'
+import { IdeaStats, StatusFilter } from './IdeaStats'
 
 interface User {
   id: string;
@@ -27,6 +30,7 @@ interface Idea {
   categoryName: string;
   commentCount: number;
   userVote: 'upvote' | 'downvote' | null;
+  userHasVoted: boolean;
 }
 
 interface Comment {
@@ -55,7 +59,22 @@ const statusLabels: Record<string, string> = {
   done: 'Done',
 };
 
-type StatusFilter = 'all' | 'waiting' | 'in_progress' | 'done';
+//type StatusFilter = 'all' | 'waiting' | 'in_progress' | 'done';
+
+interface IdeaCardProps {
+  idea: Idea;
+  user: User;
+  handleVote: (ideaId: number, action: 'vote' | 'unvote') => Promise<void>;
+  handleStatusChange: (ideaId: number, newStatus: 'waiting' | 'in_progress' | 'done') => Promise<void>;
+  toggleComments: (ideaId: number) => void;
+  openComments: number | null;
+  comments: Comment[];
+  newComment: string;
+  setNewComment: (comment: string) => void;
+  handleCommentSubmit: (ideaId: number) => Promise<void>;
+  isLoading: boolean;
+  isVoting: boolean;
+}
 
 export default function FeedbackApp({ user }: { user: User }) {
   const [ideas, setIdeas] = useState<Idea[]>([])
@@ -70,6 +89,7 @@ export default function FeedbackApp({ user }: { user: User }) {
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('all')
   const [error, setError] = useState<string | null>(null)
   const [isVoting, setIsVoting] = useState<{ [key: number]: boolean }>({})
+  
 
   useEffect(() => {
     fetchIdeas()
@@ -131,7 +151,8 @@ export default function FeedbackApp({ user }: { user: User }) {
   }
 
   async function handleVote(ideaId: number, action: 'vote' | 'unvote') {
-    setIsLoading(true)
+    setIsVoting(prev => ({ ...prev, [ideaId]: true }))
+    setError(null)
     try {
       const formData = new FormData()
       formData.append('ideaId', ideaId.toString())
@@ -140,8 +161,9 @@ export default function FeedbackApp({ user }: { user: User }) {
       setIdeas(updatedIdeas)
     } catch (error) {
       console.error('Failed to vote:', error)
+      setError('Failed to vote. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsVoting(prev => ({ ...prev, [ideaId]: false }))
     }
   }
 
@@ -221,164 +243,183 @@ export default function FeedbackApp({ user }: { user: User }) {
     }
   }
 
-  const filteredIdeas = activeStatus === 'all' ? ideas : ideas.filter(idea => idea.status === activeStatus)
+  //const filteredIdeas = activeStatus === 'all' ? ideas : ideas.filter(idea => idea.status === activeStatus)
+  const filteredIdeas = activeStatus === 'all' ? ideas : ideas.filter(idea => idea.status === activeStatus);
+
+  const ideaStats = {
+    totalIdeas: ideas.length,
+    waitingIdeas: ideas.filter(idea => idea.status === 'waiting').length,
+    inProgressIdeas: ideas.filter(idea => idea.status === 'in_progress').length,
+    doneIdeas: ideas.filter(idea => idea.status === 'done').length,
+  };
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-4">
-        <p className="text-lg">Welcome, {user.name}!</p>
-      </div>
-      <div className="flex justify-between items-center mb-4">
-        <p className="text-sm">Please Share your  here- it helps us improve. Thank you!</p>
-      </div>
-      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{error}</div>}
-      <form onSubmit={handleSubmit} className="mb-4 space-y-4">
-        <Input
-          type="text"
-          value={newIdea}
-          onChange={(e) => setNewIdea(e.target.value)}
-          placeholder="Enter your idea"
-          className="w-full"
-          disabled={isLoading}
+    <div className="flex flex-col min-h-full">
+      <div className="bg-white sticky top-16 z-10">
+        <div className="container mx-auto max-w-4xl">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-lg font-semibold">Welcome, {user.name}!</p>
+          </div>
+          <p className="text-sm mb-4">Please share your ideas here - it helps us improve. Thank you!</p>
+          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{error}</div>}
+          <form onSubmit={handleSubmit} className="mb-4 space-y-4">
+            <Input
+              type="text"
+              value={newIdea}
+              onChange={(e) => setNewIdea(e.target.value)}
+              placeholder="Enter your idea"
+              className="w-full"
+              disabled={isLoading}
+            />
+            <Textarea
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Enter your idea description"
+              className="w-full"
+              disabled={isLoading}
+            />
+            <Select value={newCategory} onValueChange={setNewCategory}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id.toString()}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="submit" className="w-full" disabled={isLoading || !newCategory}>
+              {isLoading ? 'Submitting...' : 'Submit Idea'}
+            </Button>
+          </form>
+        </div>
+        <div className="container mx-auto max-w-4xl">
+        <IdeaStats
+          {...ideaStats}
+          activeStatus={activeStatus}
+          setActiveStatus={setActiveStatus}
         />
-        <Textarea
-          value={newDescription}
-          onChange={(e) => setNewDescription(e.target.value)}
-          placeholder="Enter your idea description"
-          className="w-full"
-          disabled={isLoading}
-        />
-        <Select value={newCategory} onValueChange={setNewCategory}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a category" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map((category) => (
-              <SelectItem key={category.id} value={category.id.toString()}>
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button type="submit" className="w-full" disabled={isLoading || !newCategory}>
-          {isLoading ? 'Submitting...' : 'Submit Idea'}
-        </Button>
-      </form>
-      <div className="mb-4">
-        <select
-          value={activeStatus}
-          onChange={(e) => setActiveStatus(e.target.value as StatusFilter)}
-          className="block w-full px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-        >
-          {Object.entries(statusLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
+        </div>
+      </div>
+      <div className="flex-grow overflow-y-auto">
+        <div className="container mx-auto max-w-4xl space-y-4 p-4">
+          {Array.isArray(filteredIdeas) && filteredIdeas.map((idea) => (
+            <IdeaCard
+              key={idea.id}
+              idea={idea}
+              user={user}
+              handleVote={handleVote}
+              handleStatusChange={handleStatusChange}
+              toggleComments={toggleComments}
+              openComments={openComments}
+              comments={comments[idea.id] || []}
+              newComment={newComments[idea.id] || ''}
+              setNewComment={(comment) => setNewComments(prev => ({ ...prev, [idea.id]: comment }))}
+              handleCommentSubmit={handleCommentSubmit}
+              isLoading={isLoading}
+              isVoting={isVoting[idea.id]}
+            />
           ))}
-        </select>
-      </div>
-      <div className="space-y-4">
-        {Array.isArray(filteredIdeas) && filteredIdeas.map((idea) => (
-          <IdeaCard
-            key={idea.id}
-            idea={idea}
-            user={user}
-            handleVote={handleVote}
-            handleStatusChange={handleStatusChange}
-            toggleComments={toggleComments}
-            openComments={openComments}
-            comments={comments[idea.id] || []}
-            newComment={newComments[idea.id] || ''}
-            setNewComment={(comment) => setNewComments(prev => ({ ...prev, [idea.id]: comment }))}
-            handleCommentSubmit={handleCommentSubmit}
-            isLoading={isLoading}
-            isVoting={isVoting[idea.id]}
-          />
-        ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, openComments, comments, newComment, setNewComment, handleCommentSubmit, isLoading, isVoting }) {
-  return (
-    <Card key={idea.id} className={`${statusColors[idea.status]} transition-colors duration-200`}>
-      <CardHeader>
-        <CardTitle>{idea.idea}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-2">{idea.description}</p>
-        <p className="text-sm text-gray-500">Posted by: {idea.userId}</p>
-        <p className="text-sm text-gray-500">
-          Posted on: {new Date(idea.createdAt).toLocaleString()}
-        </p>
-        <p className="text-sm text-gray-500">Category: {idea.categoryName}</p>
-        {idea.userId === user.id ? (
-          <div className="mt-2 flex items-center">
-            <label htmlFor={`status-${idea.id}`} className="sr-only">
-              Change Status
-            </label>
-            <div className="relative inline-block w-40">
-              <select
-                id={`status-${idea.id}`}
-                value={idea.status}
-                onChange={(e) => handleStatusChange(idea.id, e.target.value as 'waiting' | 'in_progress' | 'done')}
-                className="block w-full appearance-none bg-white border border-gray-300 text-gray-700 py-2 px-3 pr-8 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                disabled={isLoading}
-              >
-                <option value="waiting">Waiting</option>
-                <option value="in_progress">In Progress</option>
-                <option value="done">Done</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                <ChevronDown className="h-4 w-4" />
+  function IdeaCard({
+    idea,
+    user,
+    handleVote,
+    handleStatusChange,
+    toggleComments,
+    openComments,
+    comments,
+    newComment,
+    setNewComment,
+    handleCommentSubmit,
+    isLoading,
+    isVoting
+  }: IdeaCardProps){
+    const [showDetails, setShowDetails] = useState(false)
+    return (
+      <Card className={`${statusColors[idea.status]} transition-colors duration-200`}>
+        <CardHeader className="p-3">
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-base font-medium truncate">{idea.idea}</CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => setShowDetails(!showDetails)}>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        {showDetails && (
+          <CardContent className="p-3 pt-0">
+            <p className="text-sm mb-2">{idea.description}</p>
+            <p className="text-xs text-gray-500">Posted by: {idea.userId}</p>
+            <p className="text-xs text-gray-500">
+              Posted on: {new Date(idea.createdAt).toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500">Category: {idea.categoryName}</p>
+            {idea.userId === user.id && (
+              <div className="mt-2 flex items-center">
+                <label htmlFor={`status-${idea.id}`} className="sr-only">
+                  Change Status
+                </label>
+                <div className="flex items-center space-x-2">
+                  <select
+                    id={`status-${idea.id}`}
+                    value={idea.status}
+                    onChange={(e) => handleStatusChange(idea.id, e.target.value as 'waiting' | 'in_progress' | 'done')}
+                    className="block w-full appearance-none bg-white border border-gray-300 text-gray-700 py-1 px-2 pr-8 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary text-sm"
+                    disabled={isLoading}
+                  >
+                    <option value="waiting">Waiting</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="done">Done</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-2 text-sm font-medium">Status: {statusLabels[idea.status]}</p>
+            )}
+          </CardContent>
         )}
-      </CardContent>
-      <CardFooter className="flex flex-col items-start space-y-4">
-      <div className="flex justify-between items-center w-full">
-          <div className="flex items-center space-x-2">
+        <CardFooter className="p-3 pt-0 flex flex-col items-start space-y-2">
+          <div className="flex justify-between items-center w-full">
+            <div className="flex items-center space-x-2">
+              <Button
+                variant={idea.userHasVoted ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => handleVote(idea.id, idea.userHasVoted ? 'unvote' : 'vote')}
+                disabled={isVoting}
+              >
+                {idea.userHasVoted ? (
+                  <ThumbsDown className="mr-1 h-3 w-3" />
+                ) : (
+                  <ThumbsUp className="mr-1 h-3 w-3" />
+                )}
+                <span className="text-xs">{idea.userHasVoted ? 'Unvote' : 'Vote'}</span>
+              </Button>
+              <span className="text-sm font-bold">Votes: {Number(idea.voteCount)}</span>
+            </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleVote(idea.id, 'vote')}
-              disabled={isLoading}
+              onClick={() => toggleComments(idea.id)}
+              className="text-xs"
             >
-              <ThumbsUp className="mr-2 h-4 w-4" />
-              Vote
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleVote(idea.id, 'unvote')}
-              disabled={isLoading}
-            >
-              <ThumbsDown className="mr-2 h-4 w-4" />
-              Vote
+              <MessageCircle className="mr-1 h-3 w-3" />
+              {idea.commentCount}
             </Button>
           </div>
-          <span className="font-bold">Votes: {Number(idea.voteCount)}</span>
-        </div>
-        <div className="w-full">
-        <Button
-        variant="outline"
-        size="sm"
-        onClick={() => toggleComments(idea.id)}
-        className="w-full justify-center"
-        >
-        <MessageCircle className="mr-2 h-4 w-4" />
-        {openComments === idea.id ? 'Hide Comments' : `Show Comments (${idea.commentCount})`}
-        </Button>
           {openComments === idea.id && (
-            <div className="mt-4 space-y-4">
+            <div className="w-full mt-2 space-y-2">
               {comments.map((comment) => (
-                <div key={comment.id} className="bg-gray-100 p-3 rounded-md">
-                  <p className="text-sm">{comment.content}</p>
-                  <p className="text-xs text-gray-500 mt-1">
+                <div key={comment.id} className="bg-gray-100 p-2 rounded-md text-xs">
+                  <p>{comment.content}</p>
+                  <p className="text-gray-500 mt-1">
                     By: {comment.userId} on {new Date(comment.createdAt).toLocaleString()}
                   </p>
                 </div>
@@ -389,19 +430,19 @@ function IdeaCard({ idea, user, handleVote, handleStatusChange, toggleComments, 
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="Add a comment"
-                  className="flex-grow"
+                  className="flex-grow text-xs"
                 />
                 <Button
                   onClick={() => handleCommentSubmit(idea.id)}
                   disabled={isLoading || !newComment}
+                  size="sm"
                 >
                   Post
                 </Button>
               </div>
             </div>
           )}
-        </div>
-      </CardFooter>
-    </Card>
-  )
+        </CardFooter>
+      </Card>
+    )
 }

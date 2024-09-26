@@ -56,15 +56,13 @@ export async function addIdea(formData: FormData) {
 }
 
 export async function getIdeas() {
+  const userIdCookie = cookies().get('userId');
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ideas`)
-    if (!response.ok) {
-      throw new Error('Failed to fetch ideas')
-    }
-    return response.json()
+    const ideas = await getIdeasFromDb(userIdCookie?.value);
+    return ideas;
   } catch (error) {
-    console.error('Error fetching ideas:', error)
-    throw error
+    console.error('Error fetching ideas:', error);
+    throw error;
   }
 }
 
@@ -80,7 +78,7 @@ export async function vote(formData: FormData) {
       await removeVoteFromIdea(ideaId, userIdCookie.value);
     }
   }
-  return getIdeas();
+  return getIdeasFromDb(userIdCookie?.value);
 }
 
 export async function updateStatus(formData: FormData) {

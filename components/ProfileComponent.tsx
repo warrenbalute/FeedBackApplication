@@ -9,11 +9,15 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { CameraIcon } from 'lucide-react'
+import { useCustomSession } from '@/hooks/useCustomSession'
+
+
 
 interface User {
   id: string;
   name: string;
   email: string;
+  image?: string;
   profilePictureUrl?: string;
 }
 
@@ -38,8 +42,16 @@ interface Comment {
   ideaTitle: string;
 }
 
-export default function ProfileComponent({ user }: { user: User }) {
-  const { data: session, update: updateSession } = useSession()
+interface ProfileComponentProps {
+  user: User;
+  initialIdeas: Idea[];
+  initialComments: Comment[];
+}
+
+//export default function ProfileComponent({ user }: { user: User })
+export default function ProfileComponent({ user, initialIdeas, initialComments }: ProfileComponentProps){
+  //const { data: session, update: updateSession } = useSession()
+  const { session, updateSession } = useCustomSession()
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [ideaPage, setIdeaPage] = useState(1);
@@ -50,7 +62,7 @@ export default function ProfileComponent({ user }: { user: User }) {
   const [commentsEndReached, setCommentsEndReached] = useState(false);
   const ideasFetchedRef = useRef(false);
   const commentsFetchedRef = useRef(false);
-  const [profilePicture, setProfilePicture] = useState<string | null>(user.profilePictureUrl || null);
+  const [profilePicture, setProfilePicture] = useState(user.image);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,43 +154,46 @@ export default function ProfileComponent({ user }: { user: User }) {
   };
 
   const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const file = event.target.files?.[0]
+    if (!file) return
 
-    setIsUploading(true);
-    setError(null);
+    setIsUploading(true)
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const formData = new FormData()
+    formData.append('file', file)
 
     try {
       const response = await fetch('/api/user/profile-picture', {
         method: 'POST',
         body: formData,
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to upload profile picture');
+        throw new Error('Failed to upload profile picture')
       }
 
-      const data = await response.json();
-      setProfilePicture(data.profilePictureUrl);
+      const data = await response.json()
       
-      // Update the session with the new profile picture URL
+      // Update session
       await updateSession({
         ...session,
         user: {
           ...session?.user,
-          profilePictureUrl: data.profilePictureUrl
+          image: data.profilePictureUrl
         }
       })
     } catch (error) {
-      console.error('Error uploading profile picture:', error);
-      setError('Failed to upload profile picture. Please try again.');
+      console.error('Error uploading profile picture:', error)
     } finally {
-      setIsUploading(false);
+      setIsUploading(false)
     }
-  };
+  }
+
+  useEffect(() => {
+    if (session?.user?.image) {
+      setProfilePicture(session.user.image);
+    }
+  }, [session]);
 
   return (
     <div className="container mx-auto p-4">
@@ -191,13 +206,19 @@ export default function ProfileComponent({ user }: { user: User }) {
           >
             {profilePicture ? (
               <div className="relative w-full h-full group">
-                <Image 
-                  src={profilePicture} 
-                  alt="Profile" 
-                  layout="fill" 
-                  objectFit="cover" 
-                  className="rounded-full"
-                />
+                <Image
+              src={session?.user?.image || '/placeholder.svg?height=80&width=80'}
+              alt={session?.user?.name || 'Profile picture'}
+              width={80}
+              height={80}
+              className="rounded-full"
+            />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleProfilePictureUpload}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
                 <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <CameraIcon className="w-6 h-6 text-white" />
                 </div>

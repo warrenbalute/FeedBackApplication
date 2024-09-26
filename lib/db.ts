@@ -7,10 +7,10 @@ const pool = mariadb.createPool({
   host: '127.0.0.1',
   user: 'node_db_user',
   password: 'qwerty123', // Replace with the actual password
-  database: 'feedback_app', // Make sure this matches your actual database name
-  connectionLimit: 5,
-  acquireTimeout: 30000,
-  connectTimeout: 30000,
+  database: 'feedback_app' // Make sure this matches your actual database name
+  //connectionLimit: 5,
+  //acquireTimeout: 30000,
+  //connectTimeout: 30000,
 });
 
 
@@ -171,17 +171,19 @@ export async function getCategories() {
   }
 }
 
-export async function getIdeasFromDb() {
+export async function getIdeasFromDb(userId?: string) {
   let conn;
   try {
     conn = await getConnection();
-    const ideas = await conn.query(`
+    const query = `
       SELECT i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, 
-             COALESCE(c.name, 'Uncategorized') as categoryName, COUNT(com.id) as commentCount
+             COALESCE(c.name, 'Uncategorized') as categoryName, COUNT(com.id) as commentCount,
+             CASE WHEN v.userId IS NOT NULL THEN TRUE ELSE FALSE END as userHasVoted
       FROM ideas i 
       LEFT JOIN categories c ON i.categoryId = c.id
       LEFT JOIN comments com ON i.id = com.ideaId
-      GROUP BY i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, c.name
+      LEFT JOIN votes v ON i.id = v.ideaId AND v.userId = ?
+      GROUP BY i.id, i.idea, i.description, i.userId, i.createdAt, i.status, i.categoryId, i.voteCount, c.name, v.userId
       ORDER BY 
         CASE 
           WHEN i.status = 'waiting' THEN 1
@@ -189,16 +191,18 @@ export async function getIdeasFromDb() {
           WHEN i.status = 'done' THEN 3
         END,
         i.createdAt DESC
-    `);
-    console.log('Ideas fetched successfully:', ideas.length);
+    `;
     
-    // Convert BigInt values to regular numbers
-    const serializedIdeas = ideas.map(idea => ({
+    const ideas = await conn.query(query, [userId || null]);
+    
+    // Convert BigInt values to regular numbers and boolean to boolean
+    const serializedIdeas = ideas.map((idea: any) => ({
       ...idea,
       id: Number(idea.id),
       categoryId: idea.categoryId ? Number(idea.categoryId) : null,
       voteCount: Number(idea.voteCount),
-      commentCount: Number(idea.commentCount)
+      commentCount: Number(idea.commentCount),
+      userHasVoted: Boolean(idea.userHasVoted)
     }));
     
     return serializedIdeas;
@@ -213,13 +217,13 @@ export async function getIdeasFromDb() {
   }
 }
 
-export async function addIdeaToDb(idea: string, description: string, userId: string, categoryId: number) {
+export async function addIdeaToDb(idea: string, description: string, userId: string, categoryId: number | null) {
   let conn;
   try {
     conn = await getConnection();
     
     // If no category is provided, use a default category (e.g., 'Other')
-    if (!categoryId) {
+    if (!categoryId === null) {
       const [defaultCategory] = await conn.query('SELECT id FROM categories WHERE name = ?', ['Other']);
       categoryId = defaultCategory ? Number(defaultCategory.id) : null;
     }
@@ -397,7 +401,7 @@ export async function getUserIdeas(userId: string, page = 1, pageSize = 10) {
     console.log('Query parameters:', [userId, pageSize, offset]);
     const ideas = await conn.query(query, [userId, pageSize, offset]);
     console.log(`Retrieved ${ideas.length} ideas from database`);
-    return ideas.map(idea => ({
+    return ideas.map((idea: any) => ({
       ...idea,
       id: Number(idea.id),
       categoryId: idea.categoryId ? Number(idea.categoryId) : null,
@@ -430,7 +434,7 @@ export async function getUserComments(userId: string, page = 1, pageSize = 10) {
     console.log('Query parameters:', [userId, pageSize, offset]);
     const comments = await conn.query(query, [userId, pageSize, offset]);
     console.log(`Retrieved ${comments.length} comments from database`);
-    return comments.map(comment => ({
+    return comments.map((comment: any) => ({
       ...comment,
       id: Number(comment.id),
       ideaId: Number(comment.ideaId)
@@ -443,32 +447,6 @@ export async function getUserComments(userId: string, page = 1, pageSize = 10) {
   }
 }
 
-// export async function authenticateWithLDAP(username: string, password: string): Promise<{ success: boolean, user?: { id: string, username: string } }> {
-//   return new Promise((resolve, reject) => {
-//     const client = ldap.createClient({
-//       url: 'ldap://ldap.forumsys.com:389'
-//     });
-
-//     const bindDN = `uid=${username},dc=example,dc=com`;
-
-//     client.bind(bindDN, password, (error) => {
-//       if (error) {
-//         console.log('LDAP bind failed:', error);
-//         resolve({ success: false });
-//       } else {
-//         console.log('LDAP bind succeeded');
-//         resolve({ success: true, user: { id: username, username: username } });
-//       }
-//       client.unbind();
-//     });
-
-//     client.on('error', (err) => {
-//       console.log('LDAP connection error:', err);
-//       resolve({ success: false, error: 'Invalid credentials' });
-//     });
-    
-//   });
-// }
 
 export async function updateProfilePicture(userId: string, profilePictureUrl: string) {
   let conn;
@@ -524,7 +502,7 @@ export async function authenticateWithLDAP(username: string, password: string): 
 
     client.on('error', (err) => {
       console.log('LDAP connection error:', err);
-      resolve({ success: false, error: 'Invalid credentials' });
+      resolve({ success: false });
     });
   });
 }
